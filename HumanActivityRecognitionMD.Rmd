@@ -1,0 +1,136 @@
+---
+title: "HumanActivityRecognition"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(AppliedPredictiveModeling)
+library(caret)
+library(ggplot2)
+library(plotly)
+library(rattle)
+library(rpart.plot)
+library(grid)
+library(gridExtra)
+
+```
+
+#1. Summary
+This project analyze using devices to recognize human activity and to predict the manner people did exercise. This document shows these stages: getting and cleaning data, exploratory analysis and machine learning models. In Getting and cleaning the information, I've created three subsets: "train_train", "train_test" from pml-training and "test_test" from pml-test. I've cleaned those databases eliminating NA's columns. I've done exploratory data analysis with "train_train" subset and run the machine learning models. The other subsets were to test the model and predict new outcomes. The results with tree prediction models show an accuracy of 49%. 
+
+#2. Getting and cleaning data
+
+##2.1 Getting the data
+Firstly, I've got the information from the web
+
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+traininghr <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
+testinghr <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+```
+
+Then, I've partioned "traininghr" in two subsets: train_train and train_test
+
+```{r}
+colnames_train <- colnames(traininghr)
+colnames_test <- colnames(testinghr)
+
+inTrain <- createDataPartition(y=traininghr$classe, p=0.7, list=FALSE)
+train_train<- traininghr[inTrain, ]
+train_test<- traininghr[-inTrain, ]
+```
+
+
+##2.2 Cleaning the data
+To run the machine learning models, I had to eliminate some columns that had many any NA's. Firstly, I configured those columns that have NA's
+
+```{r}
+contarNAs <- function(x) {
+        as.vector(apply(x, 2, function(x) length(which(!is.na(x)))))
+}
+
+columnaNA <- contarNAs(train_train)
+drops <- c()
+for (colNA in 1:length(columnaNA)) {
+        if (columnaNA[colNA] < nrow(train_train)) {
+                drops <- c(drops, colnames_train[colNA])
+        }
+}
+```
+
+Then, I reduced the columns in the three subsets:
+
+```{r}
+train_train<- train_train[,!(names(train_train) %in% drops)]
+train_train<- train_train[,8:length(colnames(train_train))]
+
+train_test<- train_test[,!(names(train_test) %in% drops)]
+train_test<- train_test[,8:length(colnames(train_test))]
+
+test_test<-testinghr
+test_test<- test_test[,!(names(test_test) %in% drops)]
+test_test<- test_test[,8:length(colnames(test_test))]
+
+```
+
+#3. Exploratory Analysis
+In this dataset and after reducing some NA´s variables, there are more than fifty possile variables. In that sense, I´ve decided to explore trouhg a heat map if there is any pattern or association.
+
+```{r}
+ccc<-as.matrix(train_train[c(1:50), c(1:52)])
+heatmap(ccc, cexCol=0.5, cexRow = 0.5)
+```
+
+After checking the variables there was not any strong relationship. Even so, there were more accel variables on the left and magnet variables on the right. Then, I've chosen the variable total acceleration to observe which classe has more acceleration.
+
+```{r}
+bp1<-qplot(classe, total_accel_belt, data=train_train, geom="boxplot")
+bp2<-qplot(classe, total_accel_arm, data=train_train, geom="boxplot")
+bp3<-qplot(classe, total_accel_forearm, data=train_train, geom="boxplot")
+bp4<-qplot(classe, total_accel_dumbbell, data=train_train, geom="boxplot")
+grid.arrange(bp1, bp2, bp3, bp4, ncol=2)
+```
+
+Again, there is no a strong distinction between classe. Even so, it seems that classe A has less acceleration. 
+
+#4. Machine learning models
+I've tried to use "lm method"" but R pointed that it was not the best election. Therefore, I've changed to decision tree models trough "rpart" method.
+
+```{r}
+tree1<-train(classe~., data=train_train, method="rpart", trControl=trainControl(method = "cv", number = 10))
+
+```
+
+I've used cross validation (10 folds). We can see the results in those commands:
+
+```{r}
+print(tree1)
+print(tree1$finalModel)
+grid.newpage()
+ff<-fancyRpartPlot(tree1$finalModel)
+ff
+```
+
+Additionally I've applied a confusion matrix to see the prediction power of the model
+
+```{r}
+prediccion1_1<-predict(tree1, train_test)
+print(confusionMatrix(prediccion1_1, train_test$classe), digits=4)
+```
+
+The accuracy of the model is between 49-55% which is not a strong prediction model and it will require further research. 
+
+Even so, I've applied this algorithm to the test_test subset.
+
+```{r}
+prediccion1_2<-predict(tree1, test_test)
+test_test$prediccion1_2<-prediccion1_2
+table(test_test$prediccion1_2)
+```
+
